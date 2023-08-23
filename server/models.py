@@ -76,11 +76,12 @@ class Signup(db.Model, SerializerMixin):
     activity_id = db.Column(db.Integer, db.ForeignKey('activities.id'))
     
     # Add relationships
-    # camper = db.relationship('Camper')
-    # activity = db.relationship('Activity')
+    # camper = db.relationship('Camper', back_populates='signups')
+    # activity = db.relationship('Activity', back_populates='signups')
 
     # Add serialization rules
-    
+    # serialize_rules=('-activity.signups', '-camper.signups')
+
     # Add validation
     @validates('time')
     def validate_time(self, key, time):

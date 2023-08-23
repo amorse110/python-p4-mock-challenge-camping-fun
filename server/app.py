@@ -16,19 +16,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.json.compact = False
 
 migrate = Migrate(app, db)
-api = Api(app)
+api = Api(app)  #####################################################    ADD THIS PART SO THE api.add_resource(......) works
 
 db.init_app(app)
 
 class Campers(Resource):
     def get(self):
-        campers = [c.to_dict(rules=("-signups",)) for c in Camper.query.all()]
+        campers = [c.to_dict(rules=("-signups",)) for c in Camper.query.all()] #c is whatever you want to call it
         return make_response(campers, 200)
 
     def post(self):
         data = request.get_json()
         try:
-            new_camper = Camper(**data)
+            new_camper = Camper(**data)  #same data as line 29
         except:
             return make_response({"errors": ["validation errors"]}, 400)
         db.session.add(new_camper)
@@ -69,7 +69,7 @@ api.add_resource(Activities, "/activities")
 
 class AcivityById(Resource):
     def delete(self, id):
-        activity = Activity.query.filter_by(id=id).first()
+        activity = Activity.query.filter_by(id=id).first()   #could also do activity = Activity.query.get(id)
         if not activity:
             return make_response({"error": "Activity not found"}, 404)
         db.session.delete(activity)
@@ -82,20 +82,14 @@ class Signups(Resource):
     def post(self):
         data = request.get_json()
         try:
-            new_signup = Signup(**data)
+            new_signup = Signup(**data)   #again data is same as line 83
         except:
             return make_response({"errors": ["validation errors"]}, 400)
         db.session.add(new_signup)
         db.session.commit()
         return make_response(
             new_signup.to_dict(
-                rules=(
-                    "-camper.signups",
-                    "-activity.signups",
-                )
-            ),
-            201,
-        )
+                rules=("-camper.signups", "-activity.signups",)), 201,)
 
 api.add_resource(Signups, "/signups")
 
