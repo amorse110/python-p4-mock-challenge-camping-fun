@@ -25,10 +25,12 @@ class Activity(db.Model, SerializerMixin):
     difficulty = db.Column(db.Integer)
 
     # Add relationship
-    campers = db.relationship('Camper', secondary = 'signups', back_populates = 'activities', viewonly=True)
-
-    # Add serialization rules
+    signups = db.relationship('Signup', backref='activity', cascade='delete')
+    campers = association_proxy('signups', 'camper')
     
+    # Add serialization rules
+    serialize_rules = ("-signups.activity", "-signups.camper",)
+
     def __repr__(self):
         return f'<Activity {self.id}: {self.name}>'
 
@@ -41,11 +43,12 @@ class Camper(db.Model, SerializerMixin):
     age = db.Column(db.Integer)
 
     # Add relationship
-    activities = db.relationship('Activity', secondary = 'signups', back_populates = 'campers', viewonly=True)
-    signups = db.relationship('Signup', back_populates = 'camper', viewonly=True)
+    signups = db.relationship('Signup', backref='camper', cascade='delete')
+    activities = association_proxy('signups', 'activity')
 
     # Add serialization rules
-    
+    serialize_rules = ('-signups.camper',)
+
     # Add validation
     @validates('name')
     def validate_name(self, key, name):
@@ -69,19 +72,19 @@ class Signup(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     time = db.Column(db.Integer)
 
-    camper_id = db.Column(db.Integer, db.ForeignKey('campers.id', ondelete = 'CASCADE'), nullable = False)
-    activity_id = db.Column(db.Integer, db.ForeignKey('activities.id', ondelete = 'CASCADE'), nullable = False)
+    camper_id = db.Column(db.Integer, db.ForeignKey('campers.id'))
+    activity_id = db.Column(db.Integer, db.ForeignKey('activities.id'))
     
     # Add relationships
-    camper = db.relationship('Camper')
-    activity = db.relationship('Activity')
+    # camper = db.relationship('Camper')
+    # activity = db.relationship('Activity')
 
     # Add serialization rules
     
     # Add validation
     @validates('time')
     def validate_time(self, key, time):
-        if time < 0 or time > 23:
+        if not time or not 0 <= time <= 23:
             raise ValueError('Signup time must be between 0 and 23')
         return time
 

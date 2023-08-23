@@ -7,8 +7,7 @@ from flask import Flask, make_response, jsonify, request
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.environ.get(
-    "DB_URI", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
+DATABASE = os.environ.get("DB_URI", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
 
 
 app = Flask(__name__)
@@ -17,114 +16,88 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.json.compact = False
 
 migrate = Migrate(app, db)
+api = Api(app)
 
 db.init_app(app)
 
-@app.route('/')
-def home():
-    return ''
+class Campers(Resource):
+    def get(self):
+        campers = [c.to_dict(rules=("-signups",)) for c in Camper.query.all()]
+        return make_response(campers, 200)
 
-@app.route('/campers', methods=['GET'])
-def get_campers():
-    campers = Camper.query.all()
-    camper_data = [{'id': c.id, 'name': c.name, 'age': c.age} for c in campers]
-    return jsonify(camper_data)
-
-@app.route('/campers/<int:id>', methods=['GET'])
-def get_camper(id):
-    camper = Camper.query.get(id)
-    if camper is None:
-        return jsonify({'error': 'Camper not found'}), 404
-    
-    camper_data = camper.to_dict(exclude=['signups'])
-    camper_data['signups'] = []
-    for signup in camper.signups:
-        signup_data = signup.to_dict()
-        signup_data['activity'] = signup.activity.to_dict(exclude=['campers'])
-        camper_data['signups'].append(signup_data)
-
-    return jsonify(camper_data)
-
-@app.route('/campers/<int:id>', methods=['PATCH'])
-def update_camper(id):
-    data = request.get_json()
-    camper = Camper.query.get(id)
-    if camper is None:
-        return jsonify({'error': 'Camper not found'}), 404
-    
-    if 'name' in data:
-        camper.name = data['name']
-    if 'age' in data:
-        camper.age = data['age']
-
-    try:
+    def post(self):
+        data = request.get_json()
+        try:
+            new_camper = Camper(**data)
+        except:
+            return make_response({"errors": ["validation errors"]}, 400)
+        db.session.add(new_camper)
         db.session.commit()
-        return jsonify(camper.to_dict(exclude=['signups']))
-    except:
-        db.session.rollback()
-        return jsonify({'errors': ['validation errors']}), 400
-    
-@app.route('/campers', methods=['POST'])
-def create_camper():
-    data = request.get_json()
-    if 'name' not in 'data' or 'age' not in data:
-        return jsonify({'errors': ['name and age are required fields']}), 400
-    
-    camper = Camper(name=data['name'], age=data['age'])
-    try:
+        return make_response(new_camper.to_dict(rules=("-signups",)), 201)
+
+api.add_resource(Campers, "/campers")
+
+class CamperById(Resource):
+    def get(self, id):
+        camper = Camper.query.get(id)
+        if not camper:
+            return make_response({"error": "Camper not found"}, 404)
+        return make_response(camper.to_dict(rules=("-signups.activity.signups",)), 200)
+
+    def patch(self, id):
+        data = request.get_json()
+        camper = Camper.query.get(id)
+        if not camper:
+            return make_response({"error": "Camper not found"}, 404)
+        try:
+            for attr, value in data.items():
+                setattr(camper, attr, value)
+        except:
+            return make_response({"errors": ["validation errors"]}, 400)
         db.session.add(camper)
         db.session.commit()
-        data['id'] = camper.id
-        return jsonify(data)
-    except:
-        db.session.rollback()
-        return jsonify({'errors': ['validation errors']}), 400
-    
-@app.route('/activities', methods=['GET'])
-def get_activities():
-    activities = Activity.query.all()
-    activity_list = [{'id': activity.id, 'name': activity.name, 'difficulty': activity.difficulty} for activity in activities]
-    return jsonify(activity_list)
+        return make_response(camper.to_dict(rules=("-signups",)), 202)
 
-@app.route('/activities/<int:id>', methods=['DELETE'])
-def delete_activity(id):
-    activity = Activity.query.get(id)
-    if activity is None:
-        return jsonify({'error': 'Activity not found'}), 404
-    
-    try:
+api.add_resource(CamperById, "/campers/<int:id>")
+
+class Activities(Resource):
+    def get(self):
+        activities = [a.to_dict(rules=("-signups",)) for a in Activity.query.all()]
+        return make_response(activities, 200)
+
+api.add_resource(Activities, "/activities")
+
+class AcivityById(Resource):
+    def delete(self, id):
+        activity = Activity.query.filter_by(id=id).first()
+        if not activity:
+            return make_response({"error": "Activity not found"}, 404)
         db.session.delete(activity)
         db.session.commit()
-        return '', 204
-    except:
-        db.session.rollback()
-        return jsonify({'errors': ['An error occured while deleting the activity']}), 500
+        return make_response("", 204)
 
-@app.route('/signups', methods=['POST'])
-def create_signup():
-    data = request.get_json()
-    if 'camper_id' not in data or 'activity_id' not in data or 'time' not in data:
-        return jsonify({'errors': ['camper_id, activity_id, and time are required fields']}), 400
+api.add_resource(AcivityById, "/activities/<int:id>")
 
-    camper_id = data['camper_id']
-    activity_id = data['activity_id']
-    time = data['time']
-
-    camper = Camper.query.get(camper_id)
-    activity = Activity.query.get(activity_id)
-
-    if not camper or not activity:
-        return jsonify({'errors': ['Camper or Activity not found']}), 400
-    
-    signup = Signup(camper=camper, activity=activity, time=time)
-
-    try:
-        db.session.add(signup)
+class Signups(Resource):
+    def post(self):
+        data = request.get_json()
+        try:
+            new_signup = Signup(**data)
+        except:
+            return make_response({"errors": ["validation errors"]}, 400)
+        db.session.add(new_signup)
         db.session.commit()
-        return jsonify(signup.to_dict(related=['activity', 'camper']))
-    except:
-        db.session.rollback()
-        return jsonify({'errors': ['validation errors']}), 400
+        return make_response(
+            new_signup.to_dict(
+                rules=(
+                    "-camper.signups",
+                    "-activity.signups",
+                )
+            ),
+            201,
+        )
+
+api.add_resource(Signups, "/signups")
 
 if __name__ == '__main__':
     app.run(port=5555, debug=True)
